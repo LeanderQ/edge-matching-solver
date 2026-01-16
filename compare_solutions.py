@@ -1,34 +1,67 @@
 """
 Script to compare solver output with known solutions.
+Supports both Unicorn Puzzle (3x3) and Ultimate Puzzle (4x4).
 """
 
-def extract_solutions(file_path):
-    """Extract solution grids from a file."""
+def extract_solutions(file_path, grid_size=None):
+    """Extract solution grids from a file.
+    
+    Args:
+        file_path: Path to the solutions file
+        grid_size: Size of the grid (3 or 4). If None, will be detected from separator length.
+    
+    Returns:
+        List of solutions, where each solution is a list of grid rows
+    """
     solutions = []
     current_solution = []
     current_row_cards = []  # Will hold 3 lines (top, middle, bottom) for one grid row
-    line_count = 0
+    prev_was_separator = False
     
     with open(file_path, 'r') as f:
         for line in f:
             line = line.strip()
             if line.startswith("Solution"):
+                # Start of a new solution
                 if current_solution:
                     solutions.append(current_solution)
                     current_solution = []
                 current_row_cards = []
-                line_count = 0
-            elif line.startswith("----------------------------"):
+                prev_was_separator = False
+            elif line.startswith("-"):
+                # This is a separator line - determine grid size from its length if not provided
+                if grid_size is None:
+                    # separator length = grid_size * 8 + grid_size + 1
+                    # For 3x3: 3*8+3+1 = 28, for 4x4: 4*8+4+1 = 37
+                    # Some files use 39 dashes for 4x4
+                    sep_len = len(line)
+                    if sep_len == 28:
+                        grid_size = 3
+                    elif sep_len in [37, 39]:
+                        grid_size = 4
+                    else:
+                        # Try to infer from number of cards in a row
+                        grid_size = 3  # default
+                
+                # If we have a complete grid row, add it to the solution
                 if current_row_cards and len(current_row_cards) == 3:
-                    # We've collected a complete grid row (3 lines)
                     current_solution.append(current_row_cards)
                     current_row_cards = []
-                    line_count = 0
+                
+                # If we see two separators in a row (or separator after completing a solution), 
+                # it might indicate a new solution
+                if prev_was_separator and current_solution:
+                    # Double separator - save current solution and start new one
+                    solutions.append(current_solution)
+                    current_solution = []
+                    current_row_cards = []
+                
+                prev_was_separator = True
             elif line.startswith("|") and "|" in line:
                 # Extract card data from line like: |   PT   |   PT   |   YH   |
                 parts = [p.strip() for p in line.split("|") if p.strip()]
                 current_row_cards.append(parts)
-                line_count += 1
+                prev_was_separator = False
     
     # Don't forget the last solution
     if current_row_cards and len(current_row_cards) == 3:
@@ -51,14 +84,24 @@ def normalize_solution(solution):
         normalized_rows.append(row_str)
     return "\n".join(normalized_rows)
 
-def compare_solutions(known_file, output_file):
-    """Compare known solutions with solver output."""
-    print("Reading known solutions...")
-    known_solutions = extract_solutions(known_file)
+def compare_solutions(known_file, output_file, puzzle_type="unicorn"):
+    """Compare known solutions with solver output.
+    
+    Args:
+        known_file: Path to file with known solutions
+        output_file: Path to file with solver output
+        puzzle_type: "unicorn" for 3x3 or "ultimate" for 4x4
+    """
+    grid_size = 3 if puzzle_type.lower() == "unicorn" else 4
+    puzzle_name = "Unicorn Puzzle" if puzzle_type.lower() == "unicorn" else "Ultimate Puzzle"
+    
+    print(f"Comparing solutions for {puzzle_name} ({grid_size}x{grid_size})...")
+    print("\nReading known solutions...")
+    known_solutions = extract_solutions(known_file, grid_size)
     print(f"Found {len(known_solutions)} known solutions")
     
     print("\nReading solver output...")
-    output_solutions = extract_solutions(output_file)
+    output_solutions = extract_solutions(output_file, grid_size)
     print(f"Found {len(output_solutions)} solutions from solver")
     
     # Normalize all solutions for comparison
@@ -108,7 +151,18 @@ def compare_solutions(known_file, output_file):
     return len(missing) == 0 and len(extra) == 0
 
 if __name__ == "__main__":
-    known_file = "/Users/leanderquiring/Documents/GitHub/edge_matching_puzzle/unicorn solutions.txt"
-    output_file = "/Users/leanderquiring/Documents/GitHub/edge-matching-solver/output.txt"
+    import sys
     
-    compare_solutions(known_file, output_file)
+    puzzle_type = sys.argv[1] if len(sys.argv) > 1 else "unicorn"
+    
+    if puzzle_type.lower() == "unicorn":
+        known_file = "/Users/leanderquiring/Documents/GitHub/edge_matching_puzzle/unicorn solutions.txt"
+        output_file = "/Users/leanderquiring/Documents/GitHub/edge-matching-solver/unicorn_solutions.txt"
+    elif puzzle_type.lower() == "ultimate":
+        known_file = "/Users/leanderquiring/Documents/GitHub/edge_matching_puzzle/ultimate puzzle solutions log.txt"
+        output_file = "/Users/leanderquiring/Documents/GitHub/edge-matching-solver/ultimate_solutions.txt"
+    else:
+        print(f"Unknown puzzle type: {puzzle_type}. Use 'unicorn' or 'ultimate'")
+        sys.exit(1)
+    
+    compare_solutions(known_file, output_file, puzzle_type)

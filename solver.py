@@ -1,14 +1,15 @@
 """
 Edge Matching Puzzle Solver
 
-This script finds all valid solutions for arranging 9 unicorn cards in a 3x3 grid
-where adjacent edges must match (same color and opposite unicorn parts: H-T or T-H).
+This script finds all valid solutions for arranging cards in a grid
+where adjacent edges must match (same color and opposite parts: H-T/T-H or I-O/O-I).
+Supports both the Unicorn Puzzle (3x3) and Ultimate Puzzle (4x4).
 """
 
 from typing import List, Tuple, Optional
 from itertools import permutations
 
-# The set of 9 unicorn cards
+# The set of 9 unicorn cards (Unicorn Puzzle)
 # Each card has 4 sides: [top, right, bottom, left]
 # Each side is [color, part] where color is P/G/R/Y and part is H/T
 unicorn_cardset = [
@@ -21,6 +22,28 @@ unicorn_cardset = [
     [["P","H"], ["G","H"], ["R","T"],["G","T"]],
     [["Y","T"], ["P","T"], ["Y","H"],["G","H"]],
     [["P","T"], ["G","H"], ["Y","H"],["Y","T"]]
+]
+
+# The set of 16 ultimate cards (Ultimate Puzzle)
+# Each card has 4 sides: [top, right, bottom, left]
+# Each side is [color, part] where color is C/A/B/P and part is I/O
+ultimate_cardset = [
+    [["C","O"], ["C","O"], ["A","I"],["C","I"]],
+    [["C","O"], ["A","O"], ["P","I"],["C","I"]],
+    [["C","O"], ["A","O"], ["A","I"],["C","I"]],
+    [["A","O"], ["B","O"], ["C","I"],["A","I"]],
+    [["A","O"], ["P","O"], ["C","I"],["A","I"]],
+    [["A","O"], ["A","O"], ["B","I"],["C","I"]],
+    [["A","O"], ["P","O"], ["B","I"],["P","I"]],
+    [["B","O"], ["C","O"], ["P","I"],["C","I"]],
+    [["B","O"], ["C","O"], ["A","I"],["B","I"]],
+    [["B","O"], ["C","O"], ["B","I"],["P","I"]],
+    [["B","O"], ["B","O"], ["P","I"],["C","I"]],
+    [["B","O"], ["B","O"], ["P","I"],["A","I"]],
+    [["P","O"], ["C","O"], ["C","I"],["B","I"]],
+    [["P","O"], ["C","O"], ["C","I"],["P","I"]],
+    [["P","O"], ["C","O"], ["A","I"],["A","I"]],
+    [["P","O"], ["B","O"], ["B","I"],["A","I"]]
 ]
 
 
@@ -53,7 +76,7 @@ def edges_match(edge1: List[str], edge2: List[str]) -> bool:
     
     For edges to match:
     - Colors must be the same
-    - Parts must be opposite (H-T or T-H)
+    - Parts must be opposite (H-T/T-H for Unicorn, I-O/O-I for Ultimate)
     
     Args:
         edge1: First edge [color, part]
@@ -65,7 +88,7 @@ def edges_match(edge1: List[str], edge2: List[str]) -> bool:
     if edge1[0] != edge2[0]:  # Colors don't match
         return False
     
-    if edge1[1] == edge2[1]:  # Parts are the same (both H or both T)
+    if edge1[1] == edge2[1]:  # Parts are the same (both H/T or both I/O)
         return False
     
     return True  # Same color, opposite parts
@@ -87,7 +110,8 @@ def get_edge(card: List[List[str]], direction: str) -> List[str]:
 
 
 def is_valid_placement(grid: List[List[Optional[List[List[str]]]]], 
-                       row: int, col: int, card: List[List[str]]) -> bool:
+                       row: int, col: int, card: List[List[str]], 
+                       grid_size: int) -> bool:
     """
     Check if placing a card at position (row, col) is valid.
     
@@ -98,10 +122,11 @@ def is_valid_placement(grid: List[List[Optional[List[List[str]]]]],
     - The card's left edge matches the card to the left (if exists)
     
     Args:
-        grid: 3x3 grid of cards (None for empty positions)
-        row: Row index (0-2)
-        col: Column index (0-2)
+        grid: Grid of cards (None for empty positions)
+        row: Row index
+        col: Column index
         card: The card to place
+        grid_size: Size of the grid (3 for 3x3, 4 for 4x4)
     
     Returns:
         True if placement is valid, False otherwise
@@ -114,14 +139,14 @@ def is_valid_placement(grid: List[List[Optional[List[List[str]]]]],
             return False
     
     # Check right edge (must match card to the right)
-    if col < 2 and grid[row][col+1] is not None:
+    if col < grid_size - 1 and grid[row][col+1] is not None:
         right_edge = get_edge(card, 'right')
         left_edge_right = get_edge(grid[row][col+1], 'left')
         if not edges_match(right_edge, left_edge_right):
             return False
     
     # Check bottom edge (must match card below)
-    if row < 2 and grid[row+1][col] is not None:
+    if row < grid_size - 1 and grid[row+1][col] is not None:
         bottom_edge = get_edge(card, 'bottom')
         top_edge_below = get_edge(grid[row+1][col], 'top')
         if not edges_match(bottom_edge, top_edge_below):
@@ -137,47 +162,52 @@ def is_valid_placement(grid: List[List[Optional[List[List[str]]]]],
     return True
 
 
-def solve_puzzle() -> List[List[List[List[List[str]]]]]:
+def solve_puzzle(cardset: List[List[List[str]]], grid_size: int) -> List[List[List[List[List[str]]]]]:
     """
-    Find all valid solutions for the 3x3 edge matching puzzle.
+    Find all valid solutions for the edge matching puzzle.
     
     Uses backtracking to try all permutations of cards and rotations.
     
+    Args:
+        cardset: List of cards to use
+        grid_size: Size of the grid (3 for 3x3, 4 for 4x4)
+    
     Returns:
-        List of all valid solutions, where each solution is a 3x3 grid of cards
+        List of all valid solutions, where each solution is a grid of cards
     """
     solutions = []
-    grid = [[None for _ in range(3)] for _ in range(3)]
+    grid = [[None for _ in range(grid_size)] for _ in range(grid_size)]
+    total_positions = grid_size * grid_size
     
     def backtrack(card_index: int, used_cards: set):
         """
         Backtracking function to find valid placements.
         
         Args:
-            card_index: Current position in the grid (0-8, row-major order)
+            card_index: Current position in the grid (row-major order)
             used_cards: Set of card indices already used
         """
-        if card_index == 9:
+        if card_index == total_positions:
             # All positions filled - found a solution
             # Deep copy the solution
             solution = [[card.copy() for card in row] for row in grid]
             solutions.append(solution)
             return
         
-        row = card_index // 3
-        col = card_index % 3
+        row = card_index // grid_size
+        col = card_index % grid_size
         
         # Try each unused card
-        for card_idx in range(9):
+        for card_idx in range(len(cardset)):
             if card_idx in used_cards:
                 continue
             
             # Try each rotation of the card
             for rotation in range(4):
-                rotated_card = rotate_card(unicorn_cardset[card_idx], rotation)
+                rotated_card = rotate_card(cardset[card_idx], rotation)
                 
                 # Check if this placement is valid
-                if is_valid_placement(grid, row, col, rotated_card):
+                if is_valid_placement(grid, row, col, rotated_card, grid_size):
                     # Place the card
                     grid[row][col] = rotated_card
                     used_cards.add(card_idx)
@@ -211,10 +241,11 @@ def print_solution(solution: List[List[List[List[str]]]]):
     Print a solution grid in a readable format with box borders.
     
     Args:
-        solution: A 3x3 grid of cards
+        solution: A grid of cards (3x3 or 4x4)
     """
-    # Calculate separator line length (3 cards * 8 chars per card + 4 separators)
-    separator = "-" * 28
+    grid_size = len(solution)
+    # Calculate separator line length (grid_size cards * 8 chars per card + (grid_size + 1) separators)
+    separator = "-" * (grid_size * 8 + grid_size + 1)
     
     for row_idx, row in enumerate(solution):
         # Print separator line
@@ -236,16 +267,30 @@ def print_solution(solution: List[List[List[List[str]]]]):
     print(separator)
 
 
-def main():
+def main(puzzle_type: str = "unicorn"):
     """
     Main function to solve the puzzle and display results.
+    
+    Args:
+        puzzle_type: "unicorn" for Unicorn Puzzle (3x3) or "ultimate" for Ultimate Puzzle (4x4)
     """
-    print("Solving edge matching puzzle...")
-    print(f"Total cards: {len(unicorn_cardset)}")
-    print("Grid size: 3x3")
+    if puzzle_type.lower() == "unicorn":
+        cardset = unicorn_cardset
+        grid_size = 3
+        puzzle_name = "Unicorn Puzzle"
+    elif puzzle_type.lower() == "ultimate":
+        cardset = ultimate_cardset
+        grid_size = 4
+        puzzle_name = "Ultimate Puzzle"
+    else:
+        raise ValueError(f"Unknown puzzle type: {puzzle_type}. Use 'unicorn' or 'ultimate'")
+    
+    print(f"Solving {puzzle_name}...")
+    print(f"Total cards: {len(cardset)}")
+    print(f"Grid size: {grid_size}x{grid_size}")
     print("\nSearching for all valid solutions...")
     
-    solutions = solve_puzzle()
+    solutions = solve_puzzle(cardset, grid_size)
     
     print(f"\n{'='*50}")
     print(f"Found {len(solutions)} solution(s)")
@@ -260,4 +305,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    puzzle_type = sys.argv[1] if len(sys.argv) > 1 else "unicorn"
+    main(puzzle_type)
